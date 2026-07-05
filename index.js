@@ -22,9 +22,11 @@ app.use('/Images', express.static(path.join(__dirname, '../Images')));
 // Routes
 const authRoutes = require('./routes/auth');
 const productRoutes = require('./routes/products');
+const notificationRoutes = require('./routes/notifications');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -37,6 +39,75 @@ app.use((err, req, res, next) => {
     res.status(500).json({ success: false, message: 'Internal Server Error', error: err.message });
 });
 
-app.listen(PORT, () => {
+// ─── Database Table Setup ───
+// Create required tables for notifications if they don't exist
+
+const db = require('./config/db');
+
+async function setupNotificationTables() {
+    try {
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS push_tokens (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                push_token VARCHAR(255) NOT NULL UNIQUE,
+                is_active TINYINT(1) DEFAULT 1,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_push_token (push_token),
+                INDEX idx_user_id (user_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS notification_log (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                order_id INT DEFAULT NULL,
+                product_id INT DEFAULT NULL,
+                user_id INT DEFAULT NULL,
+                type VARCHAR(50) NOT NULL,
+                message TEXT,
+                is_read TINYINT(1) DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_type (type),
+                INDEX idx_created_at (created_at),
+                INDEX idx_order_id (order_id),
+                INDEX idx_product_id (product_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+
+        console.log('Notification tables are ready');
+    } catch (err) {
+        console.error('Error setting up notification tables:', err.message);
+    }
+}
+
+// ─── Periodic Stock & Order Monitoring ───
+
+const { checkStockLevels, checkNewOrders } = require('./services/notificationService');
+
+function startMonitoring() {
+    // Check for new orders every 2 minutes
+    setInterval(() => {
+        checkNewOrders().catch(err => console.error('Order check failed:', err));
+    }, 2 * 60 * 1000);
+
+    // Check stock levels every 15 minutes
+    setInterval(() => {
+        checkStockLevels().catch(err => console.error('Stock check failed:', err));
+    }, 15 * 60 * 1000);
+
+    // Run initial checks after 10 seconds (give server time to fully start)
+    setTimeout(() => {
+        checkNewOrders().catch(err => console.error('Initial order check failed:', err));
+        checkStockLevels().catch(err => console.error('Initial stock check failed:', err));
+    }, 10000);
+
+    console.log('Stock & order monitoring started');
+}
+
+app.listen(PORT, async () => {
     console.log(`Server is running on port ${PORT}`);
+    await setupNotificationTables();
+    startMonitoring();
 });
