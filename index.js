@@ -23,14 +23,44 @@ app.use('/Images', express.static(path.join(__dirname, '../Images')));
 const authRoutes = require('./routes/auth');
 const productRoutes = require('./routes/products');
 const notificationRoutes = require('./routes/notifications');
+const dashboardRoutes = require('./routes/dashboard');
+const orderRoutes = require('./routes/orders');
+const customerRoutes = require('./routes/customers');
+const couponRoutes = require('./routes/coupons');
+const messageRoutes = require('./routes/messages');
+const settingsRoutes = require('./routes/settings');
+const logsRoutes = require('./routes/logs');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/orders', orderRoutes);
+app.use('/api/customers', customerRoutes);
+app.use('/api/coupons', couponRoutes);
+app.use('/api/messages', messageRoutes);
+app.use('/api/settings', settingsRoutes);
+app.use('/api/logs', logsRoutes);
 
 // Health check
-app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date() });
+app.get('/api/health', async (req, res) => {
+    try {
+        const db = require('./config/db');
+        const { loadSettings } = require('./helpers/settingsHelper');
+        const [rows] = await db.query('SELECT COUNT(*) AS c FROM settings');
+        const settings = await loadSettings(true);
+        res.json({
+            status: 'ok',
+            timestamp: new Date(),
+            database: 'connected',
+            settings_count: rows[0].c,
+            shop_name: settings.shop_name || null,
+            order_status_email_enabled: settings.order_status_email_enabled || '0',
+            orders_email_notify: settings.orders_email_notify || '0',
+        });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: err.message });
+    }
 });
 
 // Error handling middleware
@@ -109,5 +139,16 @@ function startMonitoring() {
 app.listen(PORT, async () => {
     console.log(`Server is running on port ${PORT}`);
     await setupNotificationTables();
+
+    try {
+        const { warmSettingsCache, setting } = require('./helpers/settingsHelper');
+        await warmSettingsCache();
+        const timezone = await setting('timezone', 'UTC');
+        process.env.TZ = timezone;
+        console.log(`Timezone set from settings: ${timezone}`);
+    } catch (err) {
+        console.error('Failed to warm settings cache:', err.message);
+    }
+
     startMonitoring();
 });

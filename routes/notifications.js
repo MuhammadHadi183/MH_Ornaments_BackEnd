@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const authMiddleware = require('../middleware/authMiddleware');
+const { verifyToken } = require('../middleware/authMiddleware');
 const {
     registerToken,
     unregisterToken,
@@ -9,7 +9,7 @@ const {
 } = require('../controllers/notificationController');
 
 // All routes require authentication
-router.use(authMiddleware);
+router.use(verifyToken);
 
 // Register push token
 router.post('/register', registerToken);

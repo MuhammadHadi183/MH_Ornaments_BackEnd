@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
-const authMiddleware = require('../middleware/authMiddleware');
+const { verifyToken } = require('../middleware/authMiddleware');
 
 // @route   POST api/auth/login
 // @desc    Authenticate user & get token
@@ -11,6 +11,6 @@ router.post('/login', authController.login);
 // @route   GET api/auth/me
 // @desc    Get current logged in user
 // @access  Private
-router.get('/me', authMiddleware, authController.getMe);
+router.get('/me', verifyToken, authController.getMe);
 
 module.exports = router;

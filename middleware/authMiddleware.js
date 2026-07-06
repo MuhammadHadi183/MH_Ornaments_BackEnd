@@ -3,7 +3,7 @@ const dotenv = require('dotenv');
 
 dotenv.config();
 
-module.exports = function (req, res, next) {
+const verifyToken = (req, res, next) => {
     // Get token from header
     const token = req.header('Authorization')?.replace('Bearer ', '');
 
@@ -20,4 +20,21 @@ module.exports = function (req, res, next) {
     } catch (err) {
         res.status(401).json({ success: false, message: 'Token is not valid' });
     }
+};
+
+const isAdmin = (req, res, next) => {
+    if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+    
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+        return res.status(403).json({ success: false, message: 'Forbidden. Admins only.' });
+    }
+    
+    next();
+};
+
+module.exports = {
+    verifyToken,
+    isAdmin
 };
